@@ -101,11 +101,7 @@ async function main () {
       )
 
       const dbResults = await processSearchResults(db, data.items)
-      log.info('Inserted %d URLs into DB', dbResults.inserted)
-
-      if (dbResults.errored.length) {
-        log.error(dbResults.errored, 'Encountered error(s) inserting some URLs into DB')
-      }
+      log.info('Inserted %d URLs into DB', dbResults.length)
 
       const timeSinceLastCall = Date.now() - lastCallTimestamp
       if (rateLimits.requestsRemaining < 1) {
@@ -120,7 +116,7 @@ async function main () {
   } catch (e) {
     log.error(e)
   } finally {
-    log.info('Done; cleaning up database connection')
+    log.info('Closing database connection')
 
     await cleanup(db)
   }
