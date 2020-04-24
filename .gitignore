@@ -3,3 +3,4 @@ node_modules
 *.sqlite
 *.log
 runlog
+.DS_Store

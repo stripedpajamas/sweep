@@ -58,37 +58,15 @@ function getLastPageNumber (headers) {
 function * getHelpfulParams () {
   const sortParams = ['indexed', undefined]
   const orderParams = ['asc', 'desc']
-  const searchTerms = [ // https://docs.npmjs.com/files/package.json
-    'name',
-    'version',
-    'description',
-    'keywords',
-    'homepage',
-    'bugs',
-    'license',
-    'author',
-    'contributors',
-    'files',
-    'main',
-    'browser',
-    'bin',
-    'man',
-    'directories',
-    'repository',
-    'scripts',
-    'config',
-    'dependencies',
-    'devDependencies',
-    'peerDependencies',
-    'bundledDependencies',
-    'optionalDependencies',
-    'engines',
-    'engineStrict',
-    'os',
-    'cpu',
-    'preferGlobal',
-    'private',
-    'publishConfig'
+
+  // valid fields in a package.json; ref: https://docs.npmjs.com/files/package.json
+  const searchTerms = [
+    'name', 'version', 'description', 'keywords', 'homepage',
+    'bugs', 'license', 'author', 'contributors', 'files',
+    'main', 'browser', 'bin', 'man', 'directories', 'repository',
+    'scripts', 'config', 'dependencies', 'devDependencies', 'peerDependencies',
+    'bundledDependencies', 'optionalDependencies', 'engines', 'engineStrict', 'os',
+    'cpu', 'preferGlobal', 'private', 'publishConfig'
   ]
 
   for (const sortParam of sortParams) {

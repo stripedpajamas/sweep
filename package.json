@@ -11,6 +11,7 @@
     "sqlite3": "^4.1.1"
   },
   "devDependencies": {
+    "pino-pretty": "^4.0.0",
     "standard": "^14.3.3"
   }
 }
