@@ -6,7 +6,7 @@
 ## running (don't)
 - Requires `SWEEP_TOKEN` env var (GH personal access token).
 - Dies on errors, but hopefully with enough info to start back up
-- GH seems to only provide 10 pages, but that's 1000 package.jsons
+- GH only provides 10 pages worth of results -- about 1000 package.json's
 - Results are somewhat random, so multiple runs aren't unhelpful
 
 ```shell
