@@ -9,7 +9,7 @@
 
 GH only provides 10 pages worth of results -- about 1000 package.json's. There are >6MM package.json's on GitHub. How can we find them? For now, we mess with the search params so that the "window" of 1000 results is hopefully looking at a different part of those >6MM results each time.
 
-There aren't many search params, and text searches have to have exact matches (searching for "d filename:package.json" has 0 results, but searching for "dependencies filename:package.json" has millions). The other knobs we can turn are `sort` and `order`. `sort` only allows two states: `undefined` and `indexed`, meaning "best match" and "by time of last index" respectively. `order` only allows two states: `asc` and `desc`, both self-explanatory. Normally searching using the same query and only adjusting the sort or order would be a waste of time, but since we are only accessing a window of the results, those parameters do end up affecting where the window ends up. 
+There aren't many search params, and text searches have to have exact matches (searching for "d filename:package.json" has 0 results, but searching for "dependencies filename:package.json" has millions). The other knobs we can turn are `sort` and `order`. `sort` only allows two states: `undefined` and `indexed`, meaning "best match" and "by time of last index" respectively. `order` only allows two states: `asc` and `desc`, both self-explanatory. Normally searching using the same query and only adjusting the sort or order would be a waste of time, but since we are only accessing a window of the results, those parameters do end up affecting where the window ends up. Unfortunately, `order` is only honored when `sort=indexed`.
 
 All together, you get something snurgly like this:
 
@@ -38,7 +38,7 @@ function * getHelpfulParams () {
 }
 ```
 
-Since each search results in 10 pages of 100 results, you get about 120,000 package.json's (with many duplicates). Sweep ignores dupes and at the time of writing ends up with about 45,000 unique package.json's. Since GitHub's internal indexing state is a variable at play, more unique package.json's are potentially available on subsequent runs.
+Since each search results in 10 pages of 100 results, you get about 90,000 package.json's (with many duplicates). Sweep ignores dupes and at the time of writing ends up with about 45,000 unique package.json's. Since GitHub's internal indexing state is a variable at play, more unique package.json's are potentially available on subsequent runs.
 
 ```shell
 $ npm install

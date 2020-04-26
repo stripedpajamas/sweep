@@ -53,9 +53,6 @@ function getLastPageNumber (headers) {
 }
 
 function * getHelpfulParams () {
-  const sortParams = ['indexed', undefined]
-  const orderParams = ['asc', 'desc']
-
   // valid fields in a package.json; ref: https://docs.npmjs.com/files/package.json
   const searchTerms = [
     'name', 'version', 'description', 'keywords', 'homepage',
@@ -65,12 +62,15 @@ function * getHelpfulParams () {
     'bundledDependencies', 'optionalDependencies', 'engines', 'engineStrict', 'os',
     'cpu', 'preferGlobal', 'private', 'publishConfig'
   ]
+  const orderParams = ['asc', 'desc']
 
-  for (const sortParam of sortParams) {
-    for (const orderParam of orderParams) {
-      for (const searchTerm of searchTerms) {
-        yield { sortParam, orderParam, searchTerm }
-      }
+  for (const searchTerm of searchTerms) {
+    yield { sortParam: undefined, searchTerm } // 30,000
+  }
+
+  for (const orderParam of orderParams) {
+    for (const searchTerm of searchTerms) {
+      yield { sortParam: 'indexed', orderParam, searchTerm } // 60,000
     }
   }
 }
@@ -92,7 +92,7 @@ async function getSearchResults (api, page, params) {
   return { data, rateLimits, lastPageNumber }
 }
 
-function savePackageJsonData (db, { url, content, hash, githash }) {
+function savePackageJsonData (db, { url, content, githash }) {
   return new Promise((resolve, reject) => {
     db.run(`INSERT INTO ${TABLE_NAME} VALUES (?, ?, ?)`, [url, content, githash], (err, res) => {
       if (err) {
