@@ -1,7 +1,6 @@
 require('dotenv').config()
 
 const log = require('pino')({ base: null })
-const crypto = require('crypto')
 const sqlite = require('sqlite3')
 const github = require('@octokit/rest')
 const got = require('got')
@@ -17,11 +16,9 @@ async function setup () {
     db.run(`CREATE TABLE IF NOT EXISTS ${TABLE_NAME} (
       url text NOT NULL,
       data blob NOT NULL,
-      hash text NOT NULL,
       git_hash text NOT NULL
     );`)
     db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_git_hash_pkg_jsons ON ${TABLE_NAME} (git_hash)`)
-    db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_hash_pkg_jsons ON ${TABLE_NAME} (hash)`)
   })
 
   const octokit = new github.Octokit({
@@ -95,13 +92,9 @@ async function getSearchResults (api, page, params) {
   return { data, rateLimits, lastPageNumber }
 }
 
-function getHash (data) {
-  return crypto.createHash('md5').update(data).digest('hex')
-}
-
 function savePackageJsonData (db, { url, content, hash, githash }) {
   return new Promise((resolve, reject) => {
-    db.run(`INSERT INTO ${TABLE_NAME} VALUES (?, ?, ?, ?)`, [url, content, hash, githash], (err, res) => {
+    db.run(`INSERT INTO ${TABLE_NAME} VALUES (?, ?, ?)`, [url, content, githash], (err, res) => {
       if (err) {
         return reject(err)
       }
@@ -137,18 +130,8 @@ async function processSearchResults (db, client, items) {
     }
 
     const content = await downloadPackageJson(client, url)
-    const hash = getHash(content)
-    try {
-      await savePackageJsonData(db, { url, content, hash, githash })
-      return 1
-    } catch (e) {
-      if (e.code === 'SQLITE_CONSTRAINT') {
-        log.warn('Have already saved content with hash %s, skipping save', hash)
-        return 0
-      } else {
-        throw e
-      }
-    }
+    await savePackageJsonData(db, { url, content, githash })
+    return 1
   })
 
   return (await Promise.all(work)).reduce((sum, res) => sum + res, 0)
