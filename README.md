@@ -45,3 +45,6 @@ $ npm install
 $ node . | tee sweep.log | npx pino-pretty
 # or just node .
 ```
+
+## license
+MIT
