@@ -8,17 +8,16 @@ const HttpAgent = require('agentkeepalive')
 const parseLinks = require('parse-link-header')
 
 const { HttpsAgent } = HttpAgent
-const TABLE_NAME = 'package_jsons'
 
-async function setup () {
+async function setup (tableName) {
   const db = new sqlite.Database('db.sqlite')
   db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS ${TABLE_NAME} (
+    db.run(`CREATE TABLE IF NOT EXISTS ${tableName} (
       url text NOT NULL,
       data blob NOT NULL,
       git_hash text NOT NULL
     );`)
-    db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_git_hash_pkg_jsons ON ${TABLE_NAME} (git_hash)`)
+    db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_git_hash_pkg_jsons ON ${tableName} (git_hash)`)
   })
 
   const octokit = new github.Octokit({
@@ -52,33 +51,48 @@ function getLastPageNumber (headers) {
   return parseInt(links.last.page, 10)
 }
 
-function * getHelpfulParams () {
-  // valid fields in a package.json; ref: https://docs.npmjs.com/files/package.json
-  const searchTerms = [
-    'name', 'version', 'description', 'keywords', 'homepage',
-    'bugs', 'license', 'author', 'contributors', 'files',
-    'main', 'browser', 'bin', 'man', 'directories', 'repository',
-    'scripts', 'config', 'dependencies', 'devDependencies', 'peerDependencies',
-    'bundledDependencies', 'optionalDependencies', 'engines', 'engineStrict', 'os',
-    'cpu', 'preferGlobal', 'private', 'publishConfig'
-  ]
+function * getHelpfulParams (fileName) {
   const orderParams = ['asc', 'desc']
 
-  for (const searchTerm of searchTerms) {
-    yield { sortParam: undefined, searchTerm } // 30,000
-  }
+  switch (fileName) {
+    case 'package.json': {
+      // valid fields in a package.json; ref: https://docs.npmjs.com/files/package.json
+      const searchTerms = [
+        'name', 'version', 'description', 'keywords', 'homepage',
+        'bugs', 'license', 'author', 'contributors', 'files',
+        'main', 'browser', 'bin', 'man', 'directories', 'repository',
+        'scripts', 'config', 'dependencies', 'devDependencies', 'peerDependencies',
+        'bundledDependencies', 'optionalDependencies', 'engines', 'engineStrict', 'os',
+        'cpu', 'preferGlobal', 'private', 'publishConfig'
+      ]
 
-  for (const orderParam of orderParams) {
-    for (const searchTerm of searchTerms) {
-      yield { sortParam: 'indexed', orderParam, searchTerm } // 60,000
+      for (const searchTerm of searchTerms) {
+        yield { sortParam: undefined, searchTerm } // 30,000
+      }
+
+      for (const orderParam of orderParams) {
+        for (const searchTerm of searchTerms) {
+          yield { sortParam: 'indexed', orderParam, searchTerm } // 60,000
+        }
+      }
+      break
+    }
+    default: {
+      yield { sortParam: undefined, searchTerm: '' }
+
+      for (const orderParam of orderParams) {
+        yield { sortParam: 'indexed', orderParam, searchTerm: '' }
+      }
+
+      break
     }
   }
 }
 
-async function getSearchResults (api, page, params) {
+async function getSearchResults (api, fileName, page, params) {
   const { sortParam, orderParam, searchTerm } = params
   const res = await api.search.code({
-    q: `${searchTerm} filename:package.json+language:JSON`,
+    q: `${searchTerm} filename:${fileName}`,
     per_page: 100,
     page,
     sort: sortParam,
@@ -92,27 +106,31 @@ async function getSearchResults (api, page, params) {
   return { data, rateLimits, lastPageNumber }
 }
 
-function savePackageJsonData (db, { url, content, githash }) {
+function saveFileData (db, tableName, { url, content, githash }) {
   return new Promise((resolve, reject) => {
-    db.run(`INSERT INTO ${TABLE_NAME} VALUES (?, ?, ?)`, [url, content, githash], (err, res) => {
+    db.run(`INSERT INTO ${tableName} VALUES (?, ?, ?)`, [url, content, githash], (err, res) => {
       if (err) {
+        if (err.errno === 19) {
+          // if we've seen it before, don't worry about it
+          return resolve(0)
+        }
         return reject(err)
       }
-      return resolve(res)
+      return resolve(1)
     })
   })
 }
 
-async function downloadPackageJson (client, url) {
+async function downloadFile (client, url) {
   const rawUrl = url.replace(/https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\//, 'https://raw.githubusercontent.com/$1/$2/')
   const res = await client(rawUrl)
-  log.info('Downloaded %d byte package json from %s', res.body.length, rawUrl)
+  log.info('Downloaded %d byte file from %s', res.body.length, rawUrl)
   return res.body
 }
 
-async function haveSeenGitHash (db, githash) {
+async function haveSeenGitHash (db, tableName, githash) {
   return new Promise((resolve, reject) => {
-    db.get(`SELECT git_hash FROM ${TABLE_NAME} WHERE git_hash = ?`, [githash], (err, row) => {
+    db.get(`SELECT git_hash FROM ${tableName} WHERE git_hash = ?`, [githash], (err, row) => {
       if (err) {
         return reject(err)
       }
@@ -121,17 +139,19 @@ async function haveSeenGitHash (db, githash) {
   })
 }
 
-async function processSearchResults (db, client, items) {
+async function processSearchResults (db, tableName, client, items) {
   const work = items.map(async (item) => {
+    
     const { html_url: url, sha: githash } = item
-    if (await haveSeenGitHash(db, githash)) {
+    if (await haveSeenGitHash(db, tableName, githash)) {
       log.info('Have already seen git hash %s, skipping download/save', githash)
       return 0
     }
 
-    const content = await downloadPackageJson(client, url)
-    await savePackageJsonData(db, { url, content, githash })
-    return 1
+    const content = await downloadFile(client, url)
+    const savedCount = await saveFileData(db, tableName, { url, content, githash })
+
+    return savedCount
   })
 
   return (await Promise.all(work)).reduce((sum, res) => sum + res, 0)
@@ -150,16 +170,20 @@ function sleepFor (ms) {
 }
 
 async function main () {
-  log.info('Setting up DB and API access')
-  const { db, octokit, client } = await setup()
+  const [_, __, fileName] = process.argv
+
+  const tableName = fileName.replace(/\./g, '_')
+
+  log.info(`Setting up DB (table name: ${tableName}) and API access`)
+  const { db, octokit, client } = await setup(tableName)
 
   try {
-    for (const params of getHelpfulParams()) {
+    for (const params of getHelpfulParams(fileName)) {
       let lastPage = Number.POSITIVE_INFINITY
       for (let page = 0; page < lastPage; page++) {
         let res
         try {
-          res = await getSearchResults(octokit, page, params)
+          res = await getSearchResults(octokit, fileName, page, params)
         } catch (e) {
           if (e.status === 403 && e.headers && e.headers['retry-after']) {
           // abuse detection mechanism triggered :(
@@ -176,7 +200,7 @@ async function main () {
           data.items.length, page, lastPage, rateLimits.requestsRemaining
         )
 
-        const insertedCount = await processSearchResults(db, client, data.items)
+        const insertedCount = await processSearchResults(db, tableName, client, data.items)
         log.info('Inserted %d URLs into DB', insertedCount)
 
         const timeSinceLastCall = Date.now() - lastCallTimestamp
