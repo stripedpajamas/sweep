@@ -6,7 +6,7 @@
     "agentkeepalive": "^4.1.0",
     "dotenv": "^8.2.0",
     "got": "^11.0.2",
-    "parse-link-header": "^1.0.1",
+    "parse-link-header": "^2.0.0",
     "pino": "^6.2.0",
     "sqlite3": "^4.1.1"
   },
